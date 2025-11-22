@@ -28,7 +28,6 @@ const CATEGORIES = [
   { id: 'tiras', name: 'Tiras', icon: 'document' },
   { id: 'insulina', name: 'Insulina', icon: 'lancet' },
   { id: 'suplementos', name: 'Suplementos', icon: 'pill' },
-  { id: 'alimentacao', name: 'Alimentação', icon: 'apple' },
 ];
 
 const BRANDS = [
