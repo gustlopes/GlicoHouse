@@ -16,18 +16,6 @@ export default function HeaderBanner({ onOffersPress }) {
         end={{ x: 1, y: 1 }}
         style={styles.gradientSection}
       >
-        {/* Conteúdo principal do banner */}
-        <View style={styles.bannerContent}>
-          <View style={styles.textContent}>
-            <Text style={styles.title}>Cuide da sua saúde!</Text>
-            <Text style={styles.subtitle}>
-              Monitores e produtos para diabetes com até 25% OFF
-            </Text>
-            <TouchableOpacity style={styles.offerButton} onPress={onOffersPress}>
-              <Text style={styles.offerButtonText}>Ver Ofertas</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
       </LinearGradient>
 
       {/* Parte branca com features */}

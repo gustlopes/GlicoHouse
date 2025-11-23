@@ -74,14 +74,15 @@ export default function CategoriesScreen({ onNavigateToHome, onNavigateToCart, o
   const loadProducts = async () => {
     try {
       setLoading(true);
-      const allProducts = await api.getAllProducts();
+      const allProducts = await api.getAllProducts(); 
+      
       setProducts(allProducts);
     } catch (error) {
       console.error('Erro ao carregar produtos:', error);
     } finally {
       setLoading(false);
     }
-};
+  };
 
   const toggleBrand = (brandId) => {
     if (selectedBrands.includes(brandId)) {
