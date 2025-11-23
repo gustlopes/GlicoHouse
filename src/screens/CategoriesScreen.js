@@ -22,22 +22,29 @@ import { useCart } from '../context/CartContext';
 
 const CATEGORIES = [
   { id: 'all', name: 'Todos', icon: 'box' },
-  { id: 'monitores', name: 'Monitores', icon: 'monitor' },
-  { id: 'glicosimetros', name: 'Glicosímetros', icon: 'medical' },
+  { id: 'monitores', name: 'Monitores CGM', icon: 'monitor' }, // Sensores (Medtronic, Dexcom, Libre)
+  { id: 'glicosimetros', name: 'Glicosímetros', icon: 'medical' }, // Medidores de dedo
   { id: 'lancetas', name: 'Lancetas', icon: 'lancet' },
   { id: 'tiras', name: 'Tiras', icon: 'document' },
-  { id: 'insulina', name: 'Insulina', icon: 'lancet' },
-  { id: 'suplementos', name: 'Suplementos', icon: 'pill' },
+  { id: 'insulina', name: 'Insulina', icon: 'lancet' }, // Canetas e refis
 ];
 
 const BRANDS = [
+  { id: 'menarini', name: 'A. Menarini' },
   { id: 'abbott', name: 'Abbott' },
-  { id: 'roche', name: 'Roche'},
-  { id: 'johnson', name: 'Johnson & Johnson' },
-  { id: 'novo-nordisk', name: 'Novo Nordisk'},
-  { id: 'vitalfarm', name: 'VitalFarm' },
-  { id: 'omron', name: 'Omron'},
-  { id: 'naturalsweet', name: 'NaturalSweet'},
+  { id: 'accu-chek', name: 'Accu-Chek' },
+  { id: 'ascensia', name: 'Ascensia' },
+  { id: 'bd', name: 'BD' },
+  { id: 'contour', name: 'Contour' },
+  { id: 'dexcom', name: 'Dexcom' },
+  { id: 'g-tech', name: 'G-Tech' },
+  { id: 'lilly', name: 'Lilly' },
+  { id: 'medlevensohn', name: 'MedLevensohn' },
+  { id: 'medtronic', name: 'Medtronic' },
+  { id: 'novo-nordisk', name: 'Novo Nordisk' },
+  { id: 'onetouch', name: 'OneTouch' },
+  { id: 'sanofi', name: 'Sanofi' },
+  { id: 'senseonics', name: 'Senseonics' },
 ];
 
 const SORT_OPTIONS = [
@@ -67,16 +74,14 @@ export default function CategoriesScreen({ onNavigateToHome, onNavigateToCart, o
   const loadProducts = async () => {
     try {
       setLoading(true);
-      const featured = await api.getFeaturedProducts();
-      const highlight = await api.getHighlightProducts();
-      const allProducts = [...featured, ...highlight];
+      const allProducts = await api.getAllProducts();
       setProducts(allProducts);
     } catch (error) {
       console.error('Erro ao carregar produtos:', error);
     } finally {
       setLoading(false);
     }
-  };
+};
 
   const toggleBrand = (brandId) => {
     if (selectedBrands.includes(brandId)) {

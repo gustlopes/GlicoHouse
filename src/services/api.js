@@ -1,7 +1,7 @@
 import { mockBanner, mockStats, mockCategories, mockShippingPromo } from '../data/mockData';
 
-// Endereço do Gateway no Android Emulator
-const BASE_URL = 'http://192.168.3.4:8765';
+// IP do seu PC (ajuste se necessário)
+const BASE_URL = 'http://192.168.3.4:8765'; 
 
 let authToken = null;
 
@@ -19,42 +19,46 @@ const getHeaders = () => {
   return headers;
 };
 
-// Adaptador para converter o Produto do Java para o formato do App
+// Função para descobrir a categoria baseada no nome/descrição
+const inferCategory = (name, description) => {
+  const text = (name + " " + description).toLowerCase();
+  
+  if (text.includes('insulina')) return 'insulina';
+  if (text.includes('tira')) return 'tiras';
+  if (text.includes('lanceta') || text.includes('tambor')) return 'lancetas';
+  if (text.includes('sensor') || text.includes('cgm') || text.includes('libre')) return 'monitores'; // Monitores CGM
+  if (text.includes('medidor') || text.includes('monitor')) return 'glicosimetros'; // Medidores de dedo
+  
+  return 'geral';
+};
+
 const mapProduct = (p) => ({
   id: p.id,
-  name: p.description, // Java usa description, App usa name
+  name: p.description, 
   brand: p.brand,
-  price: p.convertedPrice || p.price, // Usa o preço convertido se houver
-  rating: 5.0, // Valor padrão (backend não tem rating)
-  reviewCount: 10, // Valor padrão
+  price: p.convertedPrice || p.price,
+  rating: 5.0,
+  reviewCount: 10,
   image: p.imageUrl || 'https://via.placeholder.com/200', 
   inStock: p.stock > 0,
-  category: 'Geral' // Backend não tem categoria explícita no DTO atual
+  // Aqui aplicamos a lógica de categoria automática
+  category: inferCategory(p.description, p.especificacao || '') 
 });
 
 export const api = {
-  // --- Autenticação (Auth-Service) ---
+  // ... (login, register, createOrder mantêm-se iguais) ...
   async login(email, password) {
-    try {
-      const response = await fetch(`${BASE_URL}/auth/signin`, {
+    /* ...código do login... */
+    const response = await fetch(`${BASE_URL}/auth/signin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
-      });
-      
-      if (!response.ok) throw new Error('Falha no login');
-      
-      const data = await response.json();
-      // O backend retorna { user: {...}, token: "..." }
-      return data;
-    } catch (error) {
-      console.error('Erro login:', error);
-      throw error;
-    }
+    });
+    if (!response.ok) throw new Error('Falha no login');
+    return await response.json();
   },
 
   async register(name, email, password) {
-    try {
       const response = await fetch(`${BASE_URL}/auth/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -62,76 +66,58 @@ export const api = {
       });
       if (!response.ok) throw new Error('Falha no cadastro');
       return await response.json();
-    } catch (error) {
-      console.error('Erro cadastro:', error);
-      throw error;
-    }
   },
 
-  // --- Produtos (Product-Service via Gateway) ---
-  async getFeaturedProducts() {
-    try {
-      // Buscando produtos convertidos para BRL
-      const response = await fetch(`${BASE_URL}/product/BRL?page=0&size=10`);
-      if (!response.ok) return [];
-      const data = await response.json();
-      // O Spring Data Rest retorna array em 'content'
-      return data.content.map(mapProduct);
-    } catch (error) {
-      console.log('Erro produtos destaque:', error);
-      return [];
-    }
-  },
-
-  async getHighlightProducts() {
-    try {
-      // Pode criar endpoints diferentes no backend, aqui reusamos mudando a paginação
-      const response = await fetch(`${BASE_URL}/product/BRL?page=1&size=10`);
-      if (!response.ok) return [];
-      const data = await response.json();
-      return data.content.map(mapProduct);
-    } catch (error) {
-      return [];
-    }
-  },
-
-  // --- Endereço (Maps-Service) ---
-  async getAddressByCep(cep) {
-    try {
-      const response = await fetch(`${BASE_URL}/enderecos/${cep}`, {
-        headers: getHeaders()
-      });
-      if (!response.ok) throw new Error('CEP não encontrado');
-      return await response.json();
-    } catch (error) {
-      console.error(error);
-      throw error;
-    }
-  },
-
-  // --- Pedidos (Order-Service) ---
   async createOrder(orderData) {
-    // Implementação simplificada
-    // O backend espera criar pedido baseado no Carrinho do usuário
-    // POST /ws/orders/create/{cep} com Headers de Auth
-    try {
        const response = await fetch(`${BASE_URL}/ws/orders/create/${orderData.address.cep}`, {
           method: 'POST',
           headers: getHeaders()
        });
        if(!response.ok) throw new Error("Erro ao criar pedido");
        return await response.json();
+  },
+  
+  // --- NOVAS FUNÇÕES DE PRODUTO ---
+
+  // Busca TODOS os produtos (limite de 100 para garantir que venham todos)
+  async getAllProducts() {
+    try {
+      const response = await fetch(`${BASE_URL}/product/BRL?page=0&size=100`);
+      if (!response.ok) return [];
+      const data = await response.json();
+      return data.content.map(mapProduct);
     } catch (error) {
-       console.error(error);
-       throw error;
+      console.error('Erro ao buscar todos os produtos:', error);
+      return [];
     }
   },
 
-  // --- Dados Estáticos/Mockados (Para manter o layout funcionando onde não tem API) ---
-  async getBanner() { return mockBanner; },
-  async getStats() { return mockStats; },
-  async getCategories() { return mockCategories; },
-  async getShippingPromo() { return mockShippingPromo; },
+  // Mantemos estas para a Home, se quiser
+  async getFeaturedProducts() {
+    try {
+      const response = await fetch(`${BASE_URL}/product/BRL?page=0&size=10`);
+      if (!response.ok) return [];
+      const data = await response.json();
+      return data.content.map(mapProduct);
+    } catch (error) { return []; }
+  },
+
+  async getHighlightProducts() {
+    try {
+      const response = await fetch(`${BASE_URL}/product/BRL?page=1&size=10`);
+      if (!response.ok) return [];
+      const data = await response.json();
+      return data.content.map(mapProduct);
+    } catch (error) { return []; }
+  },
+
+  async getAddressByCep(cep) {
+    try {
+      const response = await fetch(`${BASE_URL}/enderecos/${cep}`, { headers: getHeaders() });
+      if (!response.ok) throw new Error('CEP não encontrado');
+      return await response.json();
+    } catch (error) { throw error; }
+  },
 
   // Agregador da Home
   async getHomeData() {
@@ -140,24 +126,17 @@ export const api = {
         this.getFeaturedProducts(),
         this.getHighlightProducts()
       ]);
-
       return {
         banner: mockBanner,
         stats: mockStats,
         categories: mockCategories,
-        featuredProducts: featured.length > 0 ? featured : [],
-        highlightProducts: highlighted.length > 0 ? highlighted : [],
+        featuredProducts: featured,
+        highlightProducts: highlighted,
         shippingPromo: mockShippingPromo,
       };
     } catch (error) {
-      console.error("Erro home data", error);
-      // Fallback para não quebrar o app
       return {
-         banner: mockBanner,
-         categories: [],
-         featuredProducts: [],
-         highlightProducts: [],
-         shippingPromo: null
+         banner: mockBanner, categories: [], featuredProducts: [], highlightProducts: [], shippingPromo: null
       };
     }
   },
