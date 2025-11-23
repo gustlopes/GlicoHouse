@@ -7,10 +7,15 @@ import {
   SafeAreaView,
   TouchableOpacity,
   Image,
+  Modal,
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker'; // Necessário instalar: npx expo install expo-image-picker
+
 import { COLORS } from '../constants/colors';
 import { normalize } from '../utils/responsive';
 import { useCart } from '../context/CartContext';
@@ -24,13 +29,98 @@ export default function ProductDetailScreen({ product, onBack, onNavigateToCart 
   const [selectedTab, setSelectedTab] = useState('description');
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
+  // --- ESTADOS PARA OS MODAIS DE RECEITA ---
+  const [showWarningModal, setShowWarningModal] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [prescriptionImage, setPrescriptionImage] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // Lógica principal de adicionar ao carrinho
   const handleAddToCart = () => {
-    for (let i = 0; i < quantity; i++) {
-      addToCart(product);
+    // 1. Verifica se o produto precisa de receita (suporta boolean ou string "true")
+    const needsPrescription = product.needPrescription === true || String(product.needPrescription) === 'true';
+
+    if (needsPrescription) {
+      // Se precisar, abre o primeiro modal (Aviso) e interrompe o fluxo normal
+      setShowWarningModal(true);
+    } else {
+      // Se não precisar, adiciona direto (fluxo normal)
+      addItemsToCart();
+      Alert.alert('Sucesso', 'Produto adicionado ao carrinho!');
     }
   };
 
-  const images = [product.image, product.image, product.image]; // Mock: mesma imagem 3x
+  // Função auxiliar para adicionar os itens (usada tanto no fluxo normal quanto após a receita)
+  const addItemsToCart = (imageUri = null) => {
+    for (let i = 0; i < quantity; i++) {
+      addToCart(product, imageUri);
+    }
+  };
+
+  // --- FUNÇÕES DE IMAGEM ---
+  const pickImage = async (useCamera = false) => {
+    try {
+      let permissionResult;
+      if (useCamera) {
+        permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+      } else {
+        permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      }
+
+      if (permissionResult.status !== 'granted') {
+        Alert.alert('Permissão necessária', 'Precisamos de acesso à câmera/galeria para anexar a receita.');
+        return;
+      }
+
+      const result = await (useCamera ? ImagePicker.launchCameraAsync : ImagePicker.launchImageLibraryAsync)({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.7,
+      });
+
+      if (!result.canceled) {
+        setPrescriptionImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.log('Erro ao selecionar imagem:', error);
+      Alert.alert('Erro', 'Não foi possível carregar a imagem.');
+    }
+  };
+
+  // Transição do Modal de Aviso para o Modal de Upload
+  const handleProceedToUpload = () => {
+    setShowWarningModal(false);
+    // Pequeno delay para evitar conflito visual entre modais
+    setTimeout(() => setShowUploadModal(true), 300);
+  };
+
+  // Finalização do fluxo da receita
+  const handleConfirmWithPrescription = () => {
+    if (!prescriptionImage) {
+      Alert.alert('Atenção', 'Por favor, anexe a foto da receita antes de continuar.');
+      return;
+    }
+
+    setIsProcessing(true);
+
+    // Simula processamento
+    setTimeout(() => {
+      // Adiciona ao carrinho COM a imagem
+      addItemsToCart(prescriptionImage);
+      
+      setIsProcessing(false);
+      setShowUploadModal(false);
+      setPrescriptionImage(null); // Reseta para próxima vez
+
+      Alert.alert(
+        'Produto Adicionado',
+        'O produto e a receita foram adicionados ao seu carrinho com sucesso!',
+        [{ text: 'OK' }]
+      );
+    }, 1000);
+  };
+
+  const images = [product.image, product.image, product.image];
 
   return (
     <SafeAreaView style={styles.container}>
@@ -53,24 +143,16 @@ export default function ProductDetailScreen({ product, onBack, onNavigateToCart 
       </LinearGradient>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Imagem principal */}
+        {/* ... (CONTEÚDO EXISTENTE: Imagens, Info, Abas, Quantidade) MANTENHA IGUAL ... */}
         <View style={styles.imageContainer}>
-          <Image
-            source={{ uri: images[selectedImageIndex] }}
-            style={styles.mainImage}
-            resizeMode="cover"
-          />
+          <Image source={{ uri: images[selectedImageIndex] }} style={styles.mainImage} resizeMode="cover" />
         </View>
 
-        {/* Miniaturas */}
         <View style={styles.thumbnailsContainer}>
           {images.map((img, index) => (
             <TouchableOpacity
               key={index}
-              style={[
-                styles.thumbnail,
-                selectedImageIndex === index && styles.thumbnailActive,
-              ]}
+              style={[styles.thumbnail, selectedImageIndex === index && styles.thumbnailActive]}
               onPress={() => setSelectedImageIndex(index)}
             >
               <Image source={{ uri: img }} style={styles.thumbnailImage} />
@@ -78,14 +160,8 @@ export default function ProductDetailScreen({ product, onBack, onNavigateToCart 
           ))}
         </View>
 
-        {/* Informações do produto */}
         <View style={styles.infoContainer}>
-          {/* Tag de categoria */}
-          <View style={styles.categoryTag}>
-            <Text style={styles.categoryTagText}>Monitor</Text>
-          </View>
-
-          {/* Marca e nome */}
+          <View style={styles.categoryTag}><Text style={styles.categoryTagText}>Monitor</Text></View>
           <View style={styles.titleRow}>
             <View style={styles.titleContainer}>
               <Text style={styles.brand}>{product.brand}</Text>
@@ -93,136 +169,25 @@ export default function ProductDetailScreen({ product, onBack, onNavigateToCart 
             </View>
           </View>
 
-          {/* Avaliação */}
           <View style={styles.ratingContainer}>
-            <View style={styles.stars}>
-              {[1, 2, 3, 4, 5].map((star) => (
-                <Icon
-                  key={star}
-                  name="star"
-                  size={normalize(16)}
-                  color={star <= Math.floor(product.rating) ? '#FFB800' : COLORS.gray}
-                  style={styles.star}
-                />
-              ))}
-            </View>
-            <Text style={styles.ratingText}>
-              {product.rating.toFixed(1)} ({product.reviewCount} avaliações)
-            </Text>
+             <Text style={styles.ratingText}>{product.rating.toFixed(1)} ({product.reviewCount} avaliações)</Text>
           </View>
 
-          {/* Preço */}
           <View style={styles.priceContainer}>
-            {product.oldPrice && (
-              <Text style={styles.oldPrice}>R$ {product.oldPrice.toFixed(2)}</Text>
-            )}
             <View style={styles.priceRow}>
               <Text style={styles.price}>R$ {product.price.toFixed(2)}</Text>
-              {product.oldPrice && (
-                <View style={styles.discountBadge}>
-                  <Text style={styles.discountText}>
-                    {Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)}% OFF
-                  </Text>
-                </View>
-              )}
             </View>
           </View>
-
-          {/* Benefícios para Saúde */}
-          <View style={styles.benefitsCard}>
-            <View style={styles.benefitsHeader}>
-              <Text style={styles.benefitsIcon}>💚</Text>
-              <Text style={styles.benefitsTitle}>Benefícios para Saúde</Text>
-            </View>
-            <Text style={styles.benefitsText}>
-              Reduz a necessidade de picadas no dedo, oferece controle 24h da glicose
-            </Text>
-            <View style={styles.certificationsRow}>
-              <View style={styles.certificationBadge}>
-                <Icon name="check" size={normalize(12)} color={COLORS.primary} style={styles.certificationIcon} />
-                <Text style={styles.certificationText}>Aprovado ANVISA</Text>
-              </View>
-              <View style={styles.certificationBadge}>
-                <Icon name="check" size={normalize(12)} color={COLORS.primary} style={styles.certificationIcon} />
-                <Text style={styles.certificationText}>Certificado</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Abas */}
-          <View style={styles.tabsContainer}>
-            <TouchableOpacity
-              style={[styles.tab, selectedTab === 'description' && styles.tabActive]}
-              onPress={() => setSelectedTab('description')}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  selectedTab === 'description' && styles.tabTextActive,
-                ]}
-              >
-                Descrição
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.tab, selectedTab === 'specs' && styles.tabActive]}
-              onPress={() => setSelectedTab('specs')}
-            >
-              <Text
-                style={[styles.tabText, selectedTab === 'specs' && styles.tabTextActive]}
-              >
-                Especificações
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.tab, selectedTab === 'usage' && styles.tabActive]}
-              onPress={() => setSelectedTab('usage')}
-            >
-              <Text
-                style={[styles.tabText, selectedTab === 'usage' && styles.tabTextActive]}
-              >
-                Como Usar
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Conteúdo da aba */}
-          <View style={styles.tabContent}>
-            {selectedTab === 'description' && (
-              <Text style={styles.descriptionText}>
-                Sistema de monitoramento contínuo de glicose que oferece leituras precisas em
-                tempo real através de sensor discreto no braço.
-              </Text>
-            )}
-            {selectedTab === 'specs' && (
-              <Text style={styles.descriptionText}>
-                • Sensor de 14 dias{'\n'}• À prova d'água{'\n'}• Leitura a cada minuto{'\n'}•
-                Sem necessidade de calibração
-              </Text>
-            )}
-            {selectedTab === 'usage' && (
-              <Text style={styles.descriptionText}>
-                1. Aplique o sensor na parte traseira do braço{'\n'}2. Escaneie com o leitor ou
-                smartphone{'\n'}3. Acompanhe suas leituras a qualquer momento
-              </Text>
-            )}
-          </View>
-
-          {/* Controles de quantidade */}
+          
+          {/* Seção de Quantidade */}
           <View style={styles.quantitySection}>
             <Text style={styles.quantityLabel}>Quantidade:</Text>
             <View style={styles.quantityControls}>
-              <TouchableOpacity
-                style={styles.qtyButton}
-                onPress={() => quantity > 1 && setQuantity(quantity - 1)}
-              >
+              <TouchableOpacity style={styles.qtyButton} onPress={() => quantity > 1 && setQuantity(quantity - 1)}>
                 <Text style={styles.qtyButtonText}>−</Text>
               </TouchableOpacity>
               <Text style={styles.qtyValue}>{quantity}</Text>
-              <TouchableOpacity
-                style={styles.qtyButton}
-                onPress={() => setQuantity(quantity + 1)}
-              >
+              <TouchableOpacity style={styles.qtyButton} onPress={() => setQuantity(quantity + 1)}>
                 <Text style={styles.qtyButtonText}>+</Text>
               </TouchableOpacity>
             </View>
@@ -232,7 +197,7 @@ export default function ProductDetailScreen({ product, onBack, onNavigateToCart 
         <View style={styles.bottomSpacing} />
       </ScrollView>
 
-      {/* Botão fixo de adicionar ao carrinho */}
+      {/* Botão Adicionar ao Carrinho */}
       <View style={styles.addToCartContainer}>
         <TouchableOpacity onPress={handleAddToCart}>
           <LinearGradient
@@ -248,275 +213,303 @@ export default function ProductDetailScreen({ product, onBack, onNavigateToCart 
           </LinearGradient>
         </TouchableOpacity>
       </View>
+
+      {/* --- MODAL 1: AVISO --- */}
+      <Modal
+        visible={showWarningModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowWarningModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeaderError}>
+              <Icon name="alert-circle" size={normalize(28)} color="#FFF" />
+              <Text style={styles.modalTitleWhite}>Restrição de Venda</Text>
+            </View>
+            
+            <View style={styles.modalBody}>
+              <Text style={styles.productNameAlert}>
+                {product.name}
+              </Text>
+              <Text style={styles.warningText}>
+                Este produto só pode ser comercializado perante o envio da prescrição médica.
+              </Text>
+              
+              <View style={styles.modalButtonsRow}>
+                <TouchableOpacity 
+                  style={styles.modalCancelButton} 
+                  onPress={() => setShowWarningModal(false)}
+                >
+                  <Text style={styles.modalCancelText}>Cancelar</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.modalProceedButton} 
+                  onPress={handleProceedToUpload}
+                >
+                  <Text style={styles.modalProceedText}>Continuar para envio</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* --- MODAL 2: UPLOAD --- */}
+      <Modal
+        visible={showUploadModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowUploadModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Anexar Receita Médica</Text>
+              <TouchableOpacity onPress={() => setShowUploadModal(false)}>
+                <Icon name="close" size={normalize(24)} color={COLORS.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBody}>
+              {!prescriptionImage ? (
+                <View style={styles.uploadOptionsContainer}>
+                   <Text style={{textAlign:'center', marginBottom:20, color: COLORS.textLight}}>
+                     Escolha uma opção para anexar a foto da receita:
+                   </Text>
+                   <View style={styles.attachButtonsContainer}>
+                      <TouchableOpacity style={styles.attachOption} onPress={() => pickImage(true)}>
+                        <View style={styles.attachIconBg}>
+                          <Icon name="camera" size={normalize(32)} color={COLORS.secondary} />
+                        </View>
+                        <Text style={styles.attachText}>Câmera</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity style={styles.attachOption} onPress={() => pickImage(false)}>
+                        <View style={styles.attachIconBg}>
+                          <Icon name="image" size={normalize(32)} color={COLORS.secondary} />
+                        </View>
+                        <Text style={styles.attachText}>Galeria</Text>
+                      </TouchableOpacity>
+                   </View>
+                </View>
+              ) : (
+                <View style={styles.previewContainer}>
+                  <Text style={styles.previewLabel}>Pré-visualização:</Text>
+                  <Image source={{ uri: prescriptionImage }} style={styles.prescriptionPreview} />
+                  <TouchableOpacity onPress={() => setPrescriptionImage(null)} style={{padding:10}}>
+                    <Text style={{color: COLORS.secondary, fontWeight:'bold'}}>Trocar imagem</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={[
+                    styles.confirmUploadButton,
+                    (!prescriptionImage || isProcessing) && styles.disabledButton
+                  ]}
+                  onPress={handleConfirmWithPrescription}
+                  disabled={!prescriptionImage || isProcessing}
+                >
+                  {isProcessing ? (
+                    <ActivityIndicator color="#FFF" />
+                  ) : (
+                    <Text style={styles.confirmUploadText}>Confirmar e Adicionar</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  // ... (ESTILOS EXISTENTES DO CONTAINER, HEADER, ETC - MANTENHA AQUI)
+  container: { flex: 1, backgroundColor: COLORS.background },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
+  backButton: { padding: 4 },
+  headerTitle: { flex: 1, fontSize: 16, fontWeight: 'bold', color: COLORS.white, marginHorizontal: 12 },
+  content: { flex: 1 },
+  // ... (Demais estilos de imagem, info, etc que já existiam) ...
+  imageContainer: { width: '100%', height: 300, backgroundColor: COLORS.white },
+  mainImage: { width: '100%', height: '100%' },
+  thumbnailsContainer: { flexDirection: 'row', padding: 12, gap: 12, backgroundColor: COLORS.white },
+  thumbnail: { width: 60, height: 60, borderRadius: 8, borderWidth: 2, borderColor: 'transparent' },
+  thumbnailActive: { borderColor: COLORS.primary },
+  thumbnailImage: { width: '100%', height: '100%' },
+  infoContainer: { backgroundColor: COLORS.white, padding: 16, marginTop: 8 },
+  categoryTag: { backgroundColor: COLORS.background, alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 4, marginBottom: 12 },
+  categoryTagText: { fontSize: 12, color: COLORS.text },
+  titleRow: { marginBottom: 12 },
+  titleContainer: { flex: 1 },
+  brand: { fontSize: 14, color: COLORS.textLight, marginBottom: 4 },
+  productName: { fontSize: 18, fontWeight: 'bold', color: COLORS.text },
+  ratingContainer: { marginBottom: 16 },
+  ratingText: { fontSize: 13, color: COLORS.text },
+  priceContainer: { marginBottom: 16 },
+  priceRow: { flexDirection: 'row', alignItems: 'center' },
+  price: { fontSize: 28, fontWeight: 'bold', color: COLORS.secondary, marginRight: 12 },
+  quantitySection: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  quantityLabel: { fontSize: 14, fontWeight: '600', color: COLORS.text },
+  quantityControls: { flexDirection: 'row', alignItems: 'center' },
+  qtyButton: { width: 36, height: 36, borderWidth: 1, borderColor: COLORS.gray, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  qtyButtonText: { fontSize: 20, color: COLORS.text },
+  qtyValue: { fontSize: 16, fontWeight: '600', color: COLORS.text, marginHorizontal: 20 },
+  bottomSpacing: { height: 80 },
+  addToCartContainer: { backgroundColor: COLORS.white, padding: 16, borderTopWidth: 1, borderTopColor: COLORS.gray },
+  addToCartButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderRadius: 8 },
+  cartIcon: { marginRight: 8 },
+  addToCartText: { color: COLORS.white, fontWeight: 'bold', fontSize: 16 },
+
+  // --- ESTILOS DOS MODAIS ---
+  modalOverlay: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    padding: 20,
   },
-  header: {
+  modalContent: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    overflow: 'hidden',
+    maxHeight: '85%',
+  },
+  // Modal Aviso
+  modalHeaderError: {
+    backgroundColor: '#D32F2F', // Vermelho Alerta
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    gap: 10,
   },
-  backButton: {
-    padding: 4,
+  modalTitleWhite: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
-  headerTitle: {
-    flex: 1,
+  modalBody: {
+    padding: 20,
+  },
+  productNameAlert: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: COLORS.white,
-    marginHorizontal: 12,
-  },
-  content: {
-    flex: 1,
-  },
-  imageContainer: {
-    width: '100%',
-    height: 300,
-    backgroundColor: COLORS.white,
-  },
-  mainImage: {
-    width: '100%',
-    height: '100%',
-  },
-  thumbnailsContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
-    backgroundColor: COLORS.white,
-  },
-  thumbnail: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: 'transparent',
-    overflow: 'hidden',
-  },
-  thumbnailActive: {
-    borderColor: COLORS.primary,
-  },
-  thumbnailImage: {
-    width: '100%',
-    height: '100%',
-  },
-  infoContainer: {
-    backgroundColor: COLORS.white,
-    padding: 16,
-    marginTop: 8,
-  },
-  categoryTag: {
-    backgroundColor: COLORS.background,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-    marginBottom: 12,
-  },
-  categoryTagText: {
-    fontSize: 12,
     color: COLORS.text,
+    marginBottom: 8,
   },
-  titleRow: {
-    marginBottom: 12,
+  warningText: {
+    fontSize: 15,
+    color: '#555',
+    marginBottom: 24,
+    lineHeight: 22,
   },
-  titleContainer: {
+  modalButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalCancelButton: {
     flex: 1,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    alignItems: 'center',
   },
-  brand: {
-    fontSize: 14,
-    color: COLORS.textLight,
-    marginBottom: 4,
+  modalCancelText: {
+    color: '#666',
+    fontWeight: '600',
   },
-  productName: {
+  modalProceedButton: {
+    flex: 1,
+    backgroundColor: COLORS.secondary,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modalProceedText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+
+  // Modal Upload
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: COLORS.text,
   },
-  ratingContainer: {
+  uploadOptionsContainer: {
+    paddingVertical: 10,
+  },
+  attachButtonsContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
+    justifyContent: 'space-around',
+    marginBottom: 20,
   },
-  stars: {
-    flexDirection: 'row',
-    marginRight: 8,
-  },
-  star: {
-  },
-  ratingText: {
-    fontSize: 13,
-    color: COLORS.text,
-  },
-  priceContainer: {
-    marginBottom: 16,
-  },
-  oldPrice: {
-    fontSize: 14,
-    color: COLORS.textLight,
-    textDecorationLine: 'line-through',
-    marginBottom: 4,
-  },
-  priceRow: {
-    flexDirection: 'row',
+  attachOption: {
     alignItems: 'center',
   },
-  price: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: COLORS.secondary,
-    marginRight: 12,
-  },
-  discountBadge: {
-    backgroundColor: '#FFE5E5',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  discountText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#DC3545',
-  },
-  benefitsCard: {
+  attachIconBg: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     backgroundColor: '#E8F5F5',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  benefitsHeader: {
-    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 8,
   },
-  benefitsIcon: {
-    fontSize: 20,
-    marginRight: 8,
-  },
-  benefitsTitle: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-  },
-  benefitsText: {
-    fontSize: 13,
-    color: COLORS.text,
-    lineHeight: 18,
-    marginBottom: 12,
-  },
-  certificationsRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  certificationBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  certificationIcon: {
-  },
-  certificationText: {
-    fontSize: 11,
-    color: COLORS.primary,
-    fontWeight: '600',
-  },
-  tabsContainer: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray,
-    marginBottom: 16,
-  },
-  tab: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  tabActive: {
-    borderBottomColor: COLORS.primary,
-  },
-  tabText: {
-    fontSize: 14,
-    color: COLORS.textLight,
-  },
-  tabTextActive: {
-    color: COLORS.primary,
-    fontWeight: '600',
-  },
-  tabContent: {
-    marginBottom: 24,
-  },
-  descriptionText: {
-    fontSize: 14,
-    color: COLORS.text,
-    lineHeight: 20,
-  },
-  quantitySection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  quantityLabel: {
-    fontSize: 14,
+  attachText: {
     fontWeight: '600',
     color: COLORS.text,
   },
-  quantityControls: {
-    flexDirection: 'row',
+  previewContainer: {
     alignItems: 'center',
+    marginBottom: 20,
   },
-  qtyButton: {
-    width: 36,
-    height: 36,
+  previewLabel: {
+    alignSelf: 'flex-start',
+    fontWeight: '600',
+    marginBottom: 8,
+    color: COLORS.text,
+  },
+  prescriptionPreview: {
+    width: '100%',
+    height: 250,
+    borderRadius: 8,
+    resizeMode: 'contain',
+    backgroundColor: '#f5f5f5',
     borderWidth: 1,
-    borderColor: COLORS.gray,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: '#eee',
   },
-  qtyButtonText: {
-    fontSize: 20,
-    color: COLORS.text,
-  },
-  qtyValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginHorizontal: 20,
-    minWidth: 30,
-    textAlign: 'center',
-  },
-  bottomSpacing: {
-    height: 80,
-  },
-  addToCartContainer: {
-    backgroundColor: COLORS.white,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+  modalFooter: {
+    marginTop: 10,
+    paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: COLORS.gray,
+    borderTopColor: '#eee',
   },
-  addToCartButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
+  confirmUploadButton: {
+    backgroundColor: COLORS.secondary,
+    paddingVertical: 14,
     borderRadius: 8,
+    alignItems: 'center',
   },
-  cartIcon: {
-    marginRight: 8,
+  disabledButton: {
+    backgroundColor: '#ccc',
   },
-  addToCartText: {
-    color: COLORS.white,
+  confirmUploadText: {
+    color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
   },

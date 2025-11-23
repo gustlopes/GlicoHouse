@@ -5,19 +5,23 @@ const CartContext = createContext();
 export function CartProvider({ children }) {
   const [cartItems, setCartItems] = useState([]);
 
-  const addToCart = (product) => {
+ const addToCart = (product, prescriptionUri = null) => {
     const existingItem = cartItems.find(item => item.id === product.id);
 
     if (existingItem) {
-      // Se o produto já existe, aumenta a quantidade
       setCartItems(cartItems.map(item =>
         item.id === product.id
-          ? { ...item, quantity: item.quantity + 1 }
+          ? { 
+              ...item, 
+              quantity: item.quantity + 1,
+              // Atualiza a receita se uma nova for enviada
+              prescriptionUri: prescriptionUri || item.prescriptionUri 
+            }
           : item
       ));
     } else {
-      // Adiciona novo produto com quantidade 1
-      setCartItems([...cartItems, { ...product, quantity: 1 }]);
+      // Salva a receita no novo item
+      setCartItems([...cartItems, { ...product, quantity: 1, prescriptionUri }]);
     }
   };
 

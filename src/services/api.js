@@ -1,6 +1,6 @@
 import { mockBanner, mockStats, mockCategories, mockShippingPromo } from '../data/mockData';
 
-// IP do seu PC (ajuste se necessário)
+// IP do seu PC
 const BASE_URL = 'http://192.168.3.4:8765'; 
 
 let authToken = null;
@@ -26,12 +26,13 @@ const inferCategory = (name, description) => {
   if (text.includes('insulina')) return 'insulina';
   if (text.includes('tira')) return 'tiras';
   if (text.includes('lanceta') || text.includes('tambor')) return 'lancetas';
-  if (text.includes('sensor') || text.includes('cgm') || text.includes('libre')) return 'monitores'; // Monitores CGM
-  if (text.includes('medidor') || text.includes('monitor')) return 'glicosimetros'; // Medidores de dedo
+  if (text.includes('sensor') || text.includes('cgm') || text.includes('libre')) return 'monitores';
+  if (text.includes('medidor') || text.includes('monitor')) return 'glicosimetros';
   
   return 'geral';
 };
 
+// --- ALTERAÇÃO AQUI: Adicionado needPrescription ---
 const mapProduct = (p) => ({
   id: p.id,
   name: p.description, 
@@ -41,14 +42,12 @@ const mapProduct = (p) => ({
   reviewCount: 10,
   image: p.imageUrl || 'https://via.placeholder.com/200', 
   inStock: p.stock > 0,
-  // Aqui aplicamos a lógica de categoria automática
-  category: inferCategory(p.description, p.especificacao || '') 
+  category: inferCategory(p.description, p.especificacao || ''),
+  needsPrescription: p.needsPrescription
 });
 
 export const api = {
-  // ... (login, register, createOrder mantêm-se iguais) ...
   async login(email, password) {
-    /* ...código do login... */
     const response = await fetch(`${BASE_URL}/auth/signin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -77,9 +76,6 @@ export const api = {
        return await response.json();
   },
   
-  // --- NOVAS FUNÇÕES DE PRODUTO ---
-
-  // Busca TODOS os produtos (limite de 100 para garantir que venham todos)
   async getAllProducts() {
     try {
       const response = await fetch(`${BASE_URL}/product/BRL?page=0&size=100`);
@@ -92,7 +88,6 @@ export const api = {
     }
   },
 
-  // Mantemos estas para a Home, se quiser
   async getFeaturedProducts() {
     try {
       const response = await fetch(`${BASE_URL}/product/BRL?page=0&size=10`);
@@ -119,7 +114,6 @@ export const api = {
     } catch (error) { throw error; }
   },
 
-  // Agregador da Home
   async getHomeData() {
     try {
       const [featured, highlighted] = await Promise.all([
