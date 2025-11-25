@@ -29,14 +29,12 @@ public class ProductEntity {
 	
 	@Column(name = "image_url")
 	private String imageUrl;
+
+    @Column(name = "needs_prescription")
+    private Boolean needsPrescription;
 	
 	@Transient
 	private String environment;
 	@Transient
 	private double convertedPrice;
-	
-	
-	
-	
-
 }

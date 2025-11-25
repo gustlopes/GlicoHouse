@@ -10,5 +10,7 @@ public record ProductResponse(
 	    Integer stock,
 	    String imageUrl,
 	    String enviroment,
-	    double convertedPrice
-	) {}
+	    double convertedPrice,
+		Boolean needPrescription
+	){
+	}

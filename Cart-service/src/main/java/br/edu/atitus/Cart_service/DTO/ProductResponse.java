@@ -10,4 +10,5 @@ public class ProductResponse {
 	private Integer stock;
 	private String description;
 	private Double convertedPrice;
+	private Boolean needPrescription;
 }
